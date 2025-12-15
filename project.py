@@ -178,22 +178,6 @@ def svd_features(image, p):
 # =========================================================
 
 def lda_train(X, y):
-    """Train a two-class LDA classifier.
-
-    Parameters
-    ----------
-    X : (N, d) ndarray
-        Feature matrix (rows = samples, columns = features).
-    y : (N,) ndarray
-        Labels, each 0 or 1.
-
-    Returns
-    -------
-    w : (d,) ndarray
-        Discriminant direction vector (not necessarily unit length).
-    threshold : float
-        Threshold in 1D projected space for classifying 0 vs 1.
-    """
     X = np.asarray(X, dtype=float)
     y = np.asarray(y).reshape(-1)
 
@@ -210,33 +194,44 @@ def lda_train(X, y):
     if X0.shape[0] == 0 or X1.shape[0] == 0:
         raise ValueError("Both classes must be present to train LDA.")
 
-    # Class means
     mu0 = X0.mean(axis=0)
     mu1 = X1.mean(axis=0)
 
-    # Within-class scatter: S_W = sum (x-mu_c)(x-mu_c)^T over both classes
     Z0 = X0 - mu0
     Z1 = X1 - mu1
-    SW = Z0.T @ Z0 + Z1.T @ Z1  # (d,d)
+    SW = Z0.T @ Z0 + Z1.T @ Z1
 
-    # Regularize a tiny bit for numerical stability (helps if SW is singular)
-    reg = 1e-6
+    b = (mu1 - mu0)
+
+    # If the means are (almost) identical, direction is ill-defined
+    if np.linalg.norm(b) < 1e-12:
+        w = np.zeros(d, dtype=float)
+        threshold = 0.0
+        return w, threshold
+
+    # Adaptive regularization: scale to data magnitude
+    # This is typically more stable than a fixed 1e-6
+    trace = float(np.trace(SW))
+    reg = 1e-3 * (trace / d if trace > 0 else 1.0)
     SW_reg = SW + reg * np.eye(d)
 
-    # Fisher LDA direction: w ∝ SW^{-1} (mu1 - mu0)
-    b = (mu1 - mu0)
-    w = np.linalg.solve(SW_reg, b)  # avoid explicit inverse
+    # Solve for w robustly
+    try:
+        w = np.linalg.solve(SW_reg, b)
+    except np.linalg.LinAlgError:
+        # fallback if solve fails
+        w, *_ = np.linalg.lstsq(SW_reg, b, rcond=None)
 
-    # Project training data onto 1D line: z = X w
+    # Project
     z0 = X0 @ w
     z1 = X1 @ w
 
-    # Threshold: midpoint between projected class means
-    m0 = float(z0.mean())
-    m1 = float(z1.mean())
+    # Robust “means” (median is less sensitive to outliers)
+    m0 = float(np.median(z0))
+    m1 = float(np.median(z1))
     threshold = 0.5 * (m0 + m1)
 
-    # Optional: orient w so that class 1 tends to be above the threshold
+    # Orient so that class 1 tends to be >= threshold
     if m1 < m0:
         w = -w
         threshold = -threshold
