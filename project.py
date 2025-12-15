@@ -163,10 +163,10 @@ def svd_features(image, p):
     s = np.linalg.svd(A, compute_uv=False, full_matrices=False)
 
     # Normalize the first p singular values (sum-normalization)
-    s_p = np.log(s[:p].copy() + 1e-8)
+    s_p = s[:p].copy()
     denom = s.sum()
     if denom > 0:
-        s_p /= np.linalg.norm(s_p)
+        s_p /= denom
     else:
         # all-zero image -> singular values are all zero
         s_p[:] = 0.0
