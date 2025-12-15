@@ -133,21 +133,6 @@ def svd_compress(image, k):
 # =========================================================
 
 def svd_features(image, p):
-    """Extract SVD-based features from a grayscale image.
-
-    Parameters
-    ----------
-    image : (m, n) ndarray
-        Grayscale image matrix.
-    p : int
-        Number of leading singular values to use (p <= min(m, n)).
-
-    Returns
-    -------
-    feat : (p + 2,) ndarray
-        Feature vector consisting of:
-        [normalized sigma_1, ..., normalized sigma_p, r_0.9, r_0.95]
-    """
     A = np.asarray(image, dtype=float)
     if A.ndim != 2:
         raise ValueError("image must be a 2D array (grayscale).")
@@ -159,21 +144,15 @@ def svd_features(image, p):
     if p < 1 or p > r:
         raise ValueError(f"p must satisfy 1 <= p <= min(m,n) = {r}.")
 
-    # Compute singular values (sorted descending)
+    # singular values
     s = np.linalg.svd(A, compute_uv=False, full_matrices=False)
 
-    # Normalize the first p singular values (sum-normalization)
-    s_p = s[:p].copy()
-    denom = s.sum()
-    if denom > 0:
-        s_p /= denom
-    else:
-        # all-zero image -> singular values are all zero
-        s_p[:] = 0.0
+    # --- improved singular-value features ---
+    eps = 1e-12
+    s_p = np.log(s[:p] + eps)                 # compress dynamic range
+    s_p = s_p / (np.linalg.norm(s_p) + eps)   # scale invariance
 
-    # Energy ratios r_0.9 and r_0.95:
-    # smallest k such that cumulative energy >= alpha of total energy
-    # Energy uses squared singular values (since ||A||_F^2 = sum sigma_i^2)
+    # --- energy ratios r_0.9 and r_0.95 (same as you had) ---
     energy = s**2
     total_energy = energy.sum()
 
@@ -182,17 +161,15 @@ def svd_features(image, p):
         r_095 = 0.0
     else:
         cum = np.cumsum(energy) / total_energy
-        k09 = int(np.searchsorted(cum, 0.90) + 1)   # +1 for 1-based count
+        k09 = int(np.searchsorted(cum, 0.90) + 1)
         k095 = int(np.searchsorted(cum, 0.95) + 1)
         r_09 = k09 / r
         r_095 = k095 / r
 
-    # Assemble feature vector
     feat = np.empty(p + 2, dtype=float)
     feat[:p] = s_p
     feat[p] = r_09
     feat[p + 1] = r_095
-
     return feat
 
 
