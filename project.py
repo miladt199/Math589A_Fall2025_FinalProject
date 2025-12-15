@@ -144,18 +144,16 @@ def svd_features(image, p):
     if p < 1 or p > r:
         raise ValueError(f"p must satisfy 1 <= p <= min(m,n) = {r}.")
 
-    # singular values
     s = np.linalg.svd(A, compute_uv=False, full_matrices=False)
 
-    # --- improved singular-value features ---
-    eps = 1e-12
-    s_p = np.log(s[:p] + eps)                 # compress dynamic range
-    s_p = s_p / (np.linalg.norm(s_p) + eps)   # scale invariance
+    denom = s.sum()
+    if denom > 0:
+        s_p = s[:p] / denom
+    else:
+        s_p = np.zeros(p, dtype=float)
 
-    # --- energy ratios r_0.9 and r_0.95 (same as you had) ---
     energy = s**2
     total_energy = energy.sum()
-
     if total_energy == 0:
         r_09 = 0.0
         r_095 = 0.0
