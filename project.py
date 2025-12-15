@@ -137,9 +137,6 @@ def svd_features(image, p):
     if A.ndim != 2:
         raise ValueError("image must be a 2D array (grayscale).")
 
-    # 1) mean-center to reduce brightness/background dominance
-    A = A - A.mean()
-
     m, n = A.shape
     r = min(m, n)
 
@@ -147,16 +144,15 @@ def svd_features(image, p):
     if p < 1 or p > r:
         raise ValueError(f"p must satisfy 1 <= p <= min(m,n) = {r}.")
 
+    # singular values
     s = np.linalg.svd(A, compute_uv=False, full_matrices=False)
 
+    # --- improved singular-value features ---
     eps = 1e-12
+    s_p = np.log(s[:p] + eps)                 # compress dynamic range
+    s_p = s_p / (np.linalg.norm(s_p) + eps)   # scale invariance
 
-    # 2) spectrum-shape features: log of ratios to sigma_1
-    s_norm = s / (s[0] + eps)
-    s_p = np.log(s_norm[:p] + eps)
-    s_p = s_p / (np.linalg.norm(s_p) + eps)
-
-    # energy ratios r_0.9 and r_0.95 (unchanged)
+    # --- energy ratios r_0.9 and r_0.95 (same as you had) ---
     energy = s**2
     total_energy = energy.sum()
 
